@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart ModPack Merger/Combiner | Combine Minecraft .mrpack Files</title>
+    <link rel="icon" href="https://github.com/tanishisherewithhh.png">
     <meta name="description" content="A free browser-based tool to merge multiple Minecraft .mrpack files. Automatically resolve conflicts and validate Minecraft versions and mod loaders safely.">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
@@ -335,43 +336,62 @@
         try {
             const outZip = new JSZip();
             const master = loadedPacks[0];
-            let finalIndex = JSON.parse(JSON.stringify(master.metadata));
-            finalIndex.name = "Merged Modpack Distribution";
-            finalIndex.files = [];
+            
+            let finalIndex = {
+                formatVersion: master.metadata.formatVersion || 1,
+                game: 'minecraft',
+                versionId: "merged-" + Date.now(),
+                name: "Merged Modpack Distribution",
+                summary: "Combined modpack created via Smart Merger",
+                files: [],
+                dependencies: master.metadata.dependencies
+            };
 
-            const pathRegistry = new Set();
+            const remotePathRegistry = new Set();
+            const overridePathRegistry = new Set();
 
             for (const pack of loadedPacks) {
                 log(`Injecting content from: ${pack.displayName}...`);
                 
                 pack.metadata.files.forEach(f => {
-                    if (!pathRegistry.has(f.path)) {
+                    if (!remotePathRegistry.has(f.path)) {
                         finalIndex.files.push(f);
-                        pathRegistry.add(f.path);
+                        remotePathRegistry.add(f.path);
                     } else {
-                        log(`Conflict: Kept higher priority ${f.path}`, 'warn');
+                        log(`Skipped duplicate remote file: ${f.path}`, 'warn');
                     }
                 });
-
-                const files = Object.keys(pack.zip.files);
-                for (let path of files) {
+                const zipFiles = Object.keys(pack.zip.files);
+                for (let path of zipFiles) {
                     if (path.startsWith("overrides/") && !pack.zip.files[path].dir) {
                         const internalPath = path.replace("overrides/", "");
-                        if (!pathRegistry.has("override:" + internalPath)) {
+                        
+                        if (!overridePathRegistry.has(internalPath)) {
                             const content = await pack.zip.file(path).async("uint8array");
                             outZip.file(path, content);
-                            pathRegistry.add("override:" + internalPath);
+                            overridePathRegistry.add(internalPath);
+                        } else {
+                            log(`Config Conflict: Kept priority version of ${internalPath}`, 'warn');
                         }
                     }
                 }
             }
 
             outZip.file("modrinth.index.json", JSON.stringify(finalIndex, null, 2));
-            const blob = await outZip.generateAsync({type:"blob"});
+            
+            log("Generating final .mrpack archive...");
+            const blob = await outZip.generateAsync({
+                type: "blob",
+                compression: "DEFLATE",
+                compressionOptions: { level: 6 }
+            });
+
             saveAs(blob, "merged-pack.mrpack");
-            log("SUCCESS: Export complete.", "success");
+            log("SUCCESS: Pack exported! Ready for import to Prism, Modrinth, or MultiMC.", "success");
+            
         } catch (err) {
-            log(`ERROR: ${err.message}`, "error");
+            log(`CRITICAL ERROR: ${err.message}`, "error");
+            console.error(err);
         } finally {
             mergeBtn.disabled = false;
             mergeBtn.textContent = "Merge & Export Pack";
@@ -380,3 +400,4 @@
 </script>
 </body>
 </html>
+
