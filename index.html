@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart ModPack Merger/Combiner | Combine Minecraft .mrpack Files</title>
     <link rel="icon" href="https://github.com/tanishisherewithhh.png">
-    <meta name="description" content="A free browser-based tool to merge multiple Minecraft .mrpack files. Automatically resolve conflicts and validate Minecraft versions and mod loaders safely.">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <style>
@@ -21,161 +20,113 @@
             --terminal-bg: #11111b;
         }
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
-        }
-
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
         h1 { color: var(--accent); margin-bottom: 5px; }
         .subtitle { color: #a6adc8; margin-bottom: 20px; text-align: center; font-size: 0.9rem; max-width: 600px; }
 
-        .container {
-            width: 100%;
-            max-width: 850px;
-            background: var(--card-bg);
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        }
+        .container { width: 100%; max-width: 1000px; background: var(--card-bg); padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
 
-        #error-banner {
-            background: rgba(243, 139, 168, 0.15);
-            border: 1px solid var(--danger);
-            color: var(--danger);
-            padding: 12px;
-            border-radius: 6px;
-            margin-bottom: 20px;
-            display: none;
-            font-weight: bold;
-            text-align: center;
-        }
+        .priority-banner { background: rgba(137, 180, 250, 0.1); border: 1px solid var(--accent); color: var(--accent); padding: 10px; border-radius: 8px; margin-bottom: 20px; font-size: 0.85rem; display: flex; align-items: center; gap: 10px; }
 
-        .drop-zone {
-            border: 2px dashed var(--border);
-            border-radius: 8px;
-            padding: 25px;
-            text-align: center;
-            transition: 0.3s;
-            cursor: pointer;
-            margin-bottom: 20px;
-        }
+        .config-section { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid var(--border); }
+        .input-group { display: flex; flex-direction: column; gap: 5px; }
+        .input-group label { font-size: 0.8rem; color: var(--accent); font-weight: bold; text-transform: uppercase; }
+        .input-group input { background: var(--bg-color); border: 1px solid var(--border); color: white; padding: 8px; border-radius: 4px; outline: none; }
+
+        .drop-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 25px; text-align: center; cursor: pointer; margin-bottom: 20px; transition: 0.3s; }
         .drop-zone:hover { border-color: var(--accent); background: rgba(137, 180, 250, 0.05); }
 
-        .pack-list { list-style: none; padding: 0; margin: 0; max-height: 300px; overflow-y: auto; }
-        .pack-item {
-            background: var(--bg-color);
-            border: 1px solid var(--border);
-            margin-bottom: 8px;
-            padding: 12px;
-            border-radius: 6px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .pack-item.valid { border-left: 4px solid var(--success); }
-        .pack-item.invalid { border-color: var(--danger); background: rgba(243, 139, 168, 0.05); }
+        .pack-list { list-style: none; padding: 0; margin-bottom: 20px; }
+        .pack-item { background: var(--bg-color); border: 1px solid var(--border); margin-bottom: 8px; padding: 12px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; position: relative; }
+        .pack-item:first-child { border-left: 5px solid var(--success); }
+        .priority-controls { display: flex; flex-direction: column; gap: 2px; margin-right: 15px; }
+        .p-btn { background: #313244; border: none; color: white; font-size: 0.6rem; cursor: pointer; padding: 2px 6px; border-radius: 3px; }
+        .p-btn:hover { background: var(--accent); }
 
-        .pack-info { display: flex; flex-direction: column; gap: 4px; }
-        .pack-header { font-weight: bold; display: flex; gap: 10px; align-items: center; }
-        .pack-meta { font-size: 0.8em; color: #888; display: flex; gap: 8px; }
-        .meta-tag { background: #313244; padding: 2px 6px; border-radius: 4px; }
-        .meta-error { color: var(--danger); font-weight: bold; }
+        .pack-meta { font-size: 0.8em; color: #888; display: flex; gap: 8px; margin-top: 5px; }
+        .meta-tag { background: #313244; padding: 2px 8px; border-radius: 4px; color: var(--text-color); cursor: pointer; }
+        .meta-tag.action { border: 1px solid var(--accent); color: var(--accent); }
 
-        .controls button {
-            background: #313244;
-            border: 1px solid var(--border);
-            color: var(--text-color);
-            cursor: pointer;
-            padding: 4px 8px;
-            border-radius: 4px;
-            margin-left: 4px;
-        }
-        .controls button:hover:not(:disabled) { background: var(--accent); color: var(--bg-color); }
-        .controls button.remove:hover { background: var(--danger); color: white; }
+        .mod-manager { background: var(--terminal-bg); border: 1px solid var(--border); border-radius: 8px; margin-top: 20px; display: flex; flex-direction: column; height: 500px; }
+        .category-tabs { display: flex; background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--border); }
+        .tab { padding: 12px 20px; cursor: pointer; font-size: 0.75rem; font-weight: bold; color: #6e738d; border-right: 1px solid var(--border); text-transform: uppercase; }
+        .tab.active { background: var(--card-bg); color: var(--accent); border-bottom: 2px solid var(--accent); }
 
-        #log-area {
-            background: var(--terminal-bg);
-            color: #cdd6f4;
-            font-family: 'Consolas', 'Monaco', monospace;
-            padding: 15px;
-            border-radius: 6px;
-            margin-top: 20px;
-            height: 180px;
-            overflow-y: auto;
-            font-size: 0.85rem;
-            border: 1px solid var(--border);
-            line-height: 1.4;
-        }
-        .log-entry { margin-bottom: 2px; }
-        .log-entry.success { color: var(--success); }
-        .log-entry.error { color: var(--danger); }
-        .log-entry.warn { color: var(--warning); }
-        .log-entry.system { color: var(--accent); font-weight: bold; }
+        .mod-toolbar { padding: 12px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .search-bar { flex-grow: 1; min-width: 200px; background: var(--bg-color); border: 1px solid var(--border); color: white; padding: 8px 15px; border-radius: 20px; outline: none; }
+        
+        .bulk-actions { padding: 8px 15px; background: rgba(137, 180, 250, 0.05); border-bottom: 1px solid var(--border); display: flex; gap: 15px; align-items: center; font-size: 0.75rem; }
+        .filter-toggle { display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--warning); font-weight: bold; }
 
-        .action-area {
-            margin-top: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-top: 15px;
-            border-top: 1px solid var(--border);
-        }
+        .mod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; padding: 15px; overflow-y: auto; flex-grow: 1; align-content: start; }
+        .mod-card { background: var(--card-bg); border: 1px solid var(--border); padding: 12px; border-radius: 6px; display: flex; align-items: flex-start; gap: 12px; font-size: 0.85rem; position: relative; height: fit-content; }
+        .mod-card.disabled { opacity: 0.4; filter: grayscale(1); border-style: dashed; }
+        .card-content { flex: 1; min-width: 0; }
+        .file-title { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; margin-bottom: 2px; }
+        .conflict-badge { position: absolute; top: 5px; right: 5px; font-size: 0.6rem; background: var(--warning); color: #111; padding: 1px 4px; border-radius: 3px; font-weight: bold; }
+        .auto-resolved { font-size: 0.7rem; color: var(--success); display: block; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        
+        #log-area { background: var(--terminal-bg); color: var(--success); font-family: 'Consolas', monospace; padding: 15px; height: 220px; overflow-y: scroll; font-size: 0.8rem; margin-top: 20px; border-radius: 8px; border: 1px solid var(--border); white-space: pre-wrap; }
 
-        .btn {
-            padding: 12px 28px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: 0.2s;
-        }
-        .btn-primary { background: var(--accent); color: var(--bg-color); }
-        .btn-primary:disabled { background: var(--border); cursor: not-allowed; opacity: 0.5; }
-
-        footer {
-            margin-top: 30px;
-            text-align: center;
-            font-size: 0.8rem;
-            color: #6e738d;
-        }
-        footer p { margin: 5px 0; }
+        footer { margin-top: 30px; text-align: center; font-size: 0.8rem; color: #6e738d; }
         .credits-name { color: var(--accent); font-weight: bold; text-decoration: none; }
+        
+        .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; font-size: 0.8rem; }
+        .btn-primary { background: var(--accent); color: var(--bg-color); }
+        .btn-outline { background: #313244; color: var(--text-color); border: 1px solid var(--border); }
     </style>
 </head>
 <body>
 
     <h1>Smart ModPack Merger</h1>
-    <div class="subtitle">
-        A tool to combine multiple Modrinth .mrpack files into one. 
-        Safely merge Minecraft modpacks with automatic version and loader validation.
-    </div>
+    <div class="subtitle">Combine multiple .mrpack files. Arrange packs to set priority—top packs overwrite lower ones automatically.</div>
 
     <div class="container">
-        <div id="error-banner"></div>
+        <div class="priority-banner">
+            <span><b>Priority Logic:</b> Higher packs block duplicate paths from lower packs. This ensures only one version of each mod is exported.</span>
+        </div>
+
+        <div class="config-section">
+            <div class="input-group"><label>Exported Pack Name</label><input type="text" id="customPackName" placeholder="Merged Modpack Distribution"></div>
+            <div class="input-group"><label>Version ID</label><input type="text" id="customVersionId" placeholder="1.0.0-merged"></div>
+        </div>
 
         <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
-            <strong>Click to add .mrpack files</strong> or drag and drop them here
+            <strong>Click to add .mrpack files</strong> or drag and drop
             <input type="file" id="fileInput" multiple accept=".mrpack" style="display:none">
         </div>
 
-        <ul class="pack-list" id="packList">
-            <li style="text-align:center; padding: 20px; color: #585b70;">Your modpack queue is empty.</li>
-        </ul>
+        <ul class="pack-list" id="packList"></ul>
 
-        <div id="log-area">
-            <div class="log-entry system">Ready to merge...</div>
+        <div class="mod-manager">
+            <div class="category-tabs">
+                <div class="tab active" data-cat="mods" onclick="switchTab('mods')">Mods</div>
+                <div class="tab" data-cat="resourcepacks" onclick="switchTab('resourcepacks')">Resource Packs</div>
+                <div class="tab" data-cat="others" onclick="switchTab('others')">Others</div>
+            </div>
+            <div class="mod-toolbar">
+                <input type="text" class="search-bar" id="modSearch" placeholder="Search files..." oninput="filterFiles()">
+            </div>
+            <div class="bulk-actions">
+                <label class="filter-toggle">
+                    <input type="checkbox" id="showConflictsOnly" onchange="filterFiles()"> Show Conflicts Only
+                </label>
+                <div style="flex-grow: 1;"></div>
+                <span id="visibleCount" style="color: #888;">0 items shown</span>
+                <button class="btn btn-outline btn-sm" onclick="bulkSet(true)">Select All Visible</button>
+                <button class="btn btn-outline btn-sm" onclick="bulkSet(false)">Deselect All Visible</button>
+            </div>
+            <div class="mod-grid" id="modGrid"></div>
         </div>
 
-        <div class="action-area">
-            <div id="status-text" style="font-size: 0.9rem; color: #a6adc8;">0 packs ready for processing.</div>
-            <button class="btn btn-primary" id="mergeBtn" onclick="mergePacks()" disabled>Merge & Export Pack</button>
+        <div id="log-area">>> Ready to merge...</div>
+
+        <div class="action-area" style="margin-top:20px; display:flex; justify-content:space-between; align-items:center;">
+            <div id="status-text" style="font-size: 0.85rem; color: #a6adc8;">0 packs loaded.</div>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn btn-outline" onclick="location.reload()">Reset All</button>
+                <button class="btn btn-primary" id="mergeBtn" onclick="mergePacks()" disabled>Merge & Export</button>
+            </div>
         </div>
     </div>
 
@@ -195,209 +146,176 @@
 
 <script>
     let loadedPacks = [];
-    let currentGlobalError = null;
+    let allFiles = [];
+    let currentTab = 'mods';
 
-    const logArea = document.getElementById('log-area');
-    const mergeBtn = document.getElementById('mergeBtn');
-    const packList = document.getElementById('packList');
-    const errorBanner = document.getElementById('error-banner');
-    const statusText = document.getElementById('status-text');
-
-    function log(msg, type = 'info') {
-        const div = document.createElement('div');
-        div.className = `log-entry ${type}`;
-        div.textContent = `[${new Date().toLocaleTimeString()}] ${type === 'error' ? '✖ ' : '> '}${msg}`;
-        logArea.appendChild(div);
-        logArea.scrollTop = logArea.scrollHeight;
+    function log(msg, color = 'var(--success)', bold = false) {
+        const area = document.getElementById('log-area');
+        const style = `color:${color}; ${bold ? 'font-weight:bold;' : ''}`;
+        area.innerHTML += `<div style="${style}">[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+        area.scrollTop = area.scrollHeight;
     }
 
     document.getElementById('fileInput').addEventListener('change', async (e) => {
         const files = Array.from(e.target.files);
         for (const file of files) {
-            if (!file.name.endsWith('.mrpack')) {
-                log(`Skipped ${file.name}: Not a .mrpack`, 'warn');
-                continue;
-            }
             try {
-                log(`Reading ${file.name}...`);
                 const zip = await JSZip.loadAsync(file);
-                const indexData = await zip.file("modrinth.index.json").async("string");
-                const index = JSON.parse(indexData);
+                const index = JSON.parse(await zip.file("modrinth.index.json").async("string"));
+                const pId = Math.random().toString(36).substr(2, 9);
                 
-                const deps = index.dependencies || {};
-                const mc = deps.minecraft || "Unknown";
-                const loader = Object.keys(deps).find(k => k !== "minecraft") || "None";
+                loadedPacks.push({ id: pId, zip, metadata: index, name: index.name, ver: index.dependencies.minecraft, loader: Object.keys(index.dependencies).find(k => k !== 'minecraft') });
 
-                loadedPacks.push({
-                    id: Math.random(),
-                    filename: file.name,
-                    displayName: index.name || file.name,
-                    zip,
-                    metadata: index,
-                    mcVersion: mc,
-                    loaderType: loader,
-                    error: null
+                index.files.forEach(f => {
+                    let cat = f.path.startsWith('mods/') ? 'mods' : (f.path.startsWith('resourcepacks/') ? 'resourcepacks' : 'others');
+                    allFiles.push({ ...f, _original: f, pId, pName: index.name, enabled: true, fileName: f.path.split('/').pop(), category: cat });
                 });
-                log(`Successfully loaded ${index.name}`, 'success');
-            } catch (err) {
-                log(`Failed to parse ${file.name}: ${err.message}`, 'error');
-            }
+                
+                log(`Successfully parsed: ${index.name}`);
+                autoResolveConflicts();
+            } catch (err) { log(`Error parsing pack: ${err.message}`, 'var(--danger)'); }
         }
-        validateAndRender();
+        updateUI();
     });
 
-    function validateAndRender() {
-        currentGlobalError = null;
-        if (loadedPacks.length > 0) {
-            const master = loadedPacks[0];
-            log(`Validating against Primary: ${master.displayName} (${master.mcVersion}/${master.loaderType})`, 'system');
+    function autoResolveConflicts() {
+        const seenPaths = new Map();
+        allFiles.forEach(f => { f.enabled = true; f.isDuplicate = false; delete f.keptSource; });
 
-            loadedPacks.forEach((pack, i) => {
-                pack.error = null;
-                if (i === 0) return;
-
-                if (pack.mcVersion !== master.mcVersion) {
-                    pack.error = `Version Mismatch (${pack.mcVersion} vs ${master.mcVersion})`;
-                    currentGlobalError = "Minecraft version mismatch.";
-                } else if (pack.loaderType !== master.loaderType) {
-                    pack.error = `Loader Mismatch (${pack.loaderType} vs ${master.loaderType})`;
-                    currentGlobalError = "Mod loader mismatch.";
+        loadedPacks.forEach(p => {
+            allFiles.filter(f => f.pId === p.id).forEach(f => {
+                if (seenPaths.has(f.path)) {
+                    f.enabled = false;
+                    f.isDuplicate = true;
+                    f.keptSource = seenPaths.get(f.path);
+                } else {
+                    seenPaths.set(f.path, f.pName);
                 }
             });
-        }
-        renderUI();
+        });
     }
 
-    function renderUI() {
-        packList.innerHTML = '';
-        if (loadedPacks.length === 0) {
-            packList.innerHTML = '<li style="text-align:center; padding: 20px; color: #585b70;">Queue is empty.</li>';
-            mergeBtn.disabled = true;
-            statusText.textContent = "Waiting for input...";
-            errorBanner.style.display = 'none';
-            return;
-        }
-
-        loadedPacks.forEach((pack, idx) => {
+    function updateUI() {
+        const list = document.getElementById('packList');
+        list.innerHTML = '';
+        loadedPacks.forEach((p, idx) => {
             const li = document.createElement('li');
-            li.className = `pack-item ${pack.error ? 'invalid' : 'valid'}`;
+            li.className = 'pack-item';
             li.innerHTML = `
-                <div class="pack-info">
-                    <div class="pack-header">
-                        <span style="color:${idx===0?'var(--accent)':'#fff'}">${idx===0?'★ MASTER':`#${idx+1}`}</span>
-                        <span>${pack.displayName}</span>
+                <div style="display:flex; align-items:center;">
+                    <div class="priority-controls">
+                        <button class="p-btn" onclick="movePriority(${idx}, -1)">▲</button>
+                        <button class="p-btn" onclick="movePriority(${idx}, 1)">▼</button>
                     </div>
-                    <div class="pack-meta">
-                        <span class="meta-tag">${pack.mcVersion}</span>
-                        <span class="meta-tag">${pack.loaderType}</span>
-                        ${pack.error ? `<span class="meta-error">⚠️ ${pack.error}</span>` : ''}
+                    <div>
+                        <div class="pack-header"><b>Priority ${idx+1}</b>: ${p.name}</div>
+                        <div class="pack-meta"><span class="meta-tag action" onclick="filterByPack('${p.id}')">View contents</span><span class="meta-tag">${p.ver}</span><span class="meta-tag">${p.loader}</span></div>
                     </div>
                 </div>
-                <div class="controls">
-                    <button onclick="move(${idx}, -1)" ${idx===0?'disabled':''}>▲</button>
-                    <button onclick="move(${idx}, 1)" ${idx===loadedPacks.length-1?'disabled':''}>▼</button>
-                    <button class="remove" onclick="removePack(${idx})">✕</button>
-                </div>
-            `;
-            packList.appendChild(li);
+                <button class="btn" style="color:var(--danger);" onclick="removePack(${idx})">✕</button>`;
+            list.appendChild(li);
+        });
+        document.getElementById('mergeBtn').disabled = loadedPacks.length === 0;
+        document.getElementById('status-text').textContent = `${loadedPacks.length} packs loaded.`;
+        filterFiles();
+    }
+
+    function filterFiles() {
+        const query = document.getElementById('modSearch').value.toLowerCase();
+        const conflictsOnly = document.getElementById('showConflictsOnly').checked;
+        const grid = document.getElementById('modGrid');
+        grid.innerHTML = '';
+        
+        const filtered = allFiles.filter(m => {
+            if (m.category !== currentTab) return false;
+            if (conflictsOnly && !m.isDuplicate) return false;
+            return m.fileName.toLowerCase().includes(query) || m.pName.toLowerCase().includes(query);
         });
 
-        if (currentGlobalError) {
-            errorBanner.textContent = `⛔ Merge Denied: ${currentGlobalError}`;
-            errorBanner.style.display = 'block';
-            mergeBtn.disabled = true;
-            statusText.textContent = "Resolve version conflicts.";
-        } else {
-            errorBanner.style.display = 'none';
-            mergeBtn.disabled = false;
-            statusText.textContent = `${loadedPacks.length} packs ready.`;
+        document.getElementById('visibleCount').textContent = `${filtered.length} items shown`;
+
+        filtered.forEach(m => {
+            const card = document.createElement('div');
+            card.className = `mod-card ${m.enabled ? '' : 'disabled'}`;
+            card.innerHTML = `
+                ${m.isDuplicate ? '<span class="conflict-badge">LOWER PRIO</span>' : ''}
+                <input type="checkbox" ${m.enabled?'checked':''} onchange="toggleFile('${m.path}','${m.pId}')">
+                <div class="card-content">
+                    <div class="file-title">${m.fileName}</div>
+                    <div style="font-size:0.7rem; color:var(--accent)">Source: ${m.pName}</div>
+                    ${m.isDuplicate ? `<span class="auto-resolved">Excluded: Replaced by version from ${m.keptSource}</span>` : ''}
+                </div>`;
+            grid.appendChild(card);
+        });
+    }
+
+    function toggleFile(path, pId) {
+        const file = allFiles.find(m => m.path === path && m.pId === pId);
+        if (file) file.enabled = !file.enabled;
+        filterFiles();
+    }
+
+    function movePriority(idx, direction) {
+        const newIdx = idx + direction;
+        if (newIdx >= 0 && newIdx < loadedPacks.length) {
+            const pack = loadedPacks.splice(idx, 1)[0];
+            loadedPacks.splice(newIdx, 0, pack);
+            autoResolveConflicts();
+            updateUI();
         }
-    }
-
-    function move(idx, dir) {
-        const target = idx + dir;
-        [loadedPacks[idx], loadedPacks[target]] = [loadedPacks[target], loadedPacks[idx]];
-        log(`Moved ${loadedPacks[target].displayName}`);
-        validateAndRender();
-    }
-
-    function removePack(idx) {
-        log(`Removed ${loadedPacks[idx].displayName}`);
-        loadedPacks.splice(idx, 1);
-        validateAndRender();
     }
 
     async function mergePacks() {
-        if (currentGlobalError) return;
-        mergeBtn.disabled = true;
-        mergeBtn.textContent = "Merging...";
-        log("Starting Merge Operation...", "system");
-
-        try {
-            const outZip = new JSZip();
-            const master = loadedPacks[0];
+        log("Starting Strict Merge...", "var(--accent)", true);
+        const outZip = new JSZip();
+        const finalFiles = [];
+        const finalFilePaths = new Set();
+        
+        for (const pack of loadedPacks) {
+            log(`Processing: ${pack.name}`);
+            const packFiles = allFiles.filter(f => f.pId === pack.id && f.enabled);
             
-            let finalIndex = {
-                formatVersion: master.metadata.formatVersion || 1,
-                game: 'minecraft',
-                versionId: "merged-" + Date.now(),
-                name: "Merged Modpack Distribution",
-                summary: "Combined modpack created via Smart Merger",
-                files: [],
-                dependencies: master.metadata.dependencies
-            };
-
-            const remotePathRegistry = new Set();
-            const overridePathRegistry = new Set();
-
-            for (const pack of loadedPacks) {
-                log(`Injecting content from: ${pack.displayName}...`);
-                
-                pack.metadata.files.forEach(f => {
-                    if (!remotePathRegistry.has(f.path)) {
-                        finalIndex.files.push(f);
-                        remotePathRegistry.add(f.path);
-                    } else {
-                        log(`Skipped duplicate remote file: ${f.path}`, 'warn');
-                    }
-                });
-                const zipFiles = Object.keys(pack.zip.files);
-                for (let path of zipFiles) {
-                    if (path.startsWith("overrides/") && !pack.zip.files[path].dir) {
-                        const internalPath = path.replace("overrides/", "");
-                        
-                        if (!overridePathRegistry.has(internalPath)) {
-                            const content = await pack.zip.file(path).async("uint8array");
-                            outZip.file(path, content);
-                            overridePathRegistry.add(internalPath);
-                        } else {
-                            log(`Config Conflict: Kept priority version of ${internalPath}`, 'warn');
-                        }
-                    }
+            for (const f of packFiles) {
+                if (finalFilePaths.has(f.path)) {
+                    continue;
                 }
+                
+                if (!f.hashes || !f.downloads || f.downloads.length === 0) {
+                    log(`Warning: Metadata missing for ${f.fileName}.`, 'var(--warning)');
+                    continue;
+                }
+
+                finalFiles.push(f._original);
+                finalFilePaths.add(f.path);
             }
 
-            outZip.file("modrinth.index.json", JSON.stringify(finalIndex, null, 2));
-            
-            log("Generating final .mrpack archive...");
-            const blob = await outZip.generateAsync({
-                type: "blob",
-                compression: "DEFLATE",
-                compressionOptions: { level: 6 }
-            });
-
-            saveAs(blob, "merged-pack.mrpack");
-            log("SUCCESS: Pack exported! Ready for import to Prism, Modrinth, or MultiMC.", "success");
-            
-        } catch (err) {
-            log(`CRITICAL ERROR: ${err.message}`, "error");
-            console.error(err);
-        } finally {
-            mergeBtn.disabled = false;
-            mergeBtn.textContent = "Merge & Export Pack";
+            const seenOverrides = new Set();
+            for (let path in pack.zip.files) {
+                if (path.startsWith("overrides/") && !pack.zip.files[path].dir && !seenOverrides.has(path)) {
+                    outZip.file(path, await pack.zip.file(path).async("uint8array"));
+                    seenOverrides.add(path);
+                }
+            }
         }
+
+        const index = { 
+            formatVersion: 1, game: 'minecraft', 
+            versionId: document.getElementById('customVersionId').value || "1.0.0-merged", 
+            name: document.getElementById('customPackName').value || "Merged Pack", 
+            files: finalFiles, 
+            dependencies: loadedPacks[0].metadata.dependencies
+        };
+
+        outZip.file("modrinth.index.json", JSON.stringify(index, null, 2));
+        const blob = await outZip.generateAsync({type: "blob"});
+        saveAs(blob, `${index.name}.mrpack`);
+        log(`Success: Exported ${finalFiles.length} unique items. Duplicate paths were removed.`, "var(--success)", true);
     }
+
+    function switchTab(tab) { currentTab = tab; document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.cat === tab)); filterFiles(); }
+    function removePack(idx) { const id = loadedPacks[idx].id; allFiles = allFiles.filter(m => m.pId !== id); loadedPacks.splice(idx, 1); autoResolveConflicts(); updateUI(); }
+    function filterByPack(id) { document.getElementById('modSearch').value = `pack:${id}`; filterFiles(); }
+    function bulkSet(val) { allFiles.filter(m => m.category === currentTab).forEach(f => f.enabled = val); filterFiles(); }
 </script>
 </body>
 </html>
-
