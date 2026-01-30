@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Modpacks Merger + Console</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #1e1e2e;
+            --card-bg: #2a2a40;
+            --text-color: #e0e0e0;
+            --accent: #89b4fa;
+            --success: #a6e3a1;
+            --danger: #f38ba8;
+            --warning: #f9e2af;
+            --border: #45475a;
+            --terminal-bg: #11111b;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        h1 { color: var(--accent); margin-bottom: 5px; }
+        .subtitle { color: #a6adc8; margin-bottom: 20px; text-align: center; font-size: 0.9rem; }
+
+        .container {
+            width: 100%;
+            max-width: 850px;
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        /* Error Banner */
+        #error-banner {
+            background: rgba(243, 139, 168, 0.15);
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        /* Drop Zone */
+        .drop-zone {
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            padding: 25px;
+            text-align: center;
+            transition: 0.3s;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        .drop-zone:hover { border-color: var(--accent); background: rgba(137, 180, 250, 0.05); }
+
+    
+        .pack-list { list-style: none; padding: 0; margin: 0; max-height: 300px; overflow-y: auto; }
+        .pack-item {
+            background: var(--bg-color);
+            border: 1px solid var(--border);
+            margin-bottom: 8px;
+            padding: 12px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .pack-item.valid { border-left: 4px solid var(--success); }
+        .pack-item.invalid { border-color: var(--danger); background: rgba(243, 139, 168, 0.05); }
+
+        .pack-info { display: flex; flex-direction: column; gap: 4px; }
+        .pack-header { font-weight: bold; display: flex; gap: 10px; align-items: center; }
+        .pack-meta { font-size: 0.8em; color: #888; display: flex; gap: 8px; }
+        .meta-tag { background: #313244; padding: 2px 6px; border-radius: 4px; }
+        .meta-error { color: var(--danger); font-weight: bold; }
+
+        .controls button {
+            background: #313244;
+            border: 1px solid var(--border);
+            color: var(--text-color);
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-left: 4px;
+        }
+        .controls button:hover:not(:disabled) { background: var(--accent); color: var(--bg-color); }
+        .controls button.remove:hover { background: var(--danger); color: white; }
+
+        /* Terminal Style Log */
+        #log-area {
+            background: var(--terminal-bg);
+            color: #cdd6f4;
+            font-family: 'Consolas', 'Monaco', monospace;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+            height: 180px;
+            overflow-y: auto;
+            font-size: 0.85rem;
+            border: 1px solid var(--border);
+            line-height: 1.4;
+        }
+        .log-entry { margin-bottom: 2px; }
+        .log-entry.success { color: var(--success); }
+        .log-entry.error { color: var(--danger); }
+        .log-entry.warn { color: var(--warning); }
+        .log-entry.system { color: var(--accent); font-weight: bold; }
+
+        /* Actions */
+        .action-area {
+            margin-top: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 15px;
+            border-top: 1px solid var(--border);
+        }
+
+        .btn {
+            padding: 12px 28px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+        .btn-primary { background: var(--accent); color: var(--bg-color); }
+        .btn-primary:disabled { background: var(--border); cursor: not-allowed; opacity: 0.5; }
+
+    </style>
+</head>
+<body>
+
+    <h1>Smart ModPack Merger</h1>
+    <div class="subtitle">Combine Modrinth packs safely. Priority is top-down.</div>
+
+    <div class="container">
+        <div id="error-banner"></div>
+
+        <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
+            <strong>Click to add .mrpack files</strong> or drag them here
+            <input type="file" id="fileInput" multiple accept=".mrpack" style="display:none">
+        </div>
+
+        <ul class="pack-list" id="packList">
+            <li style="text-align:center; padding: 20px; color: #585b70;">Queue is empty.</li>
+        </ul>
+
+        <div id="log-area">
+            <div class="log-entry system">Initializing... Completed.</div>
+        </div>
+
+        <div class="action-area">
+            <div id="status-text" style="font-size: 0.9rem; color: #a6adc8;">No files loaded.</div>
+            <button class="btn btn-primary" id="mergeBtn" onclick="mergePacks()" disabled>Merge & Export</button>
+        </div>
+    </div>
+
+<script>
+    let loadedPacks = [];
+    let currentGlobalError = null;
+
+    const logArea = document.getElementById('log-area');
+    const mergeBtn = document.getElementById('mergeBtn');
+    const packList = document.getElementById('packList');
+    const errorBanner = document.getElementById('error-banner');
+    const statusText = document.getElementById('status-text');
+
+    function log(msg, type = 'info') {
+        const div = document.createElement('div');
+        div.className = `log-entry ${type}`;
+        div.textContent = `[${new Date().toLocaleTimeString()}] ${type === 'error' ? '✖ ' : '> '}${msg}`;
+        logArea.appendChild(div);
+        logArea.scrollTop = logArea.scrollHeight;
+    }
+
+    document.getElementById('fileInput').addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files);
+        for (const file of files) {
+            if (!file.name.endsWith('.mrpack')) {
+                log(`Skipped ${file.name}: Not a .mrpack`, 'warn');
+                continue;
+            }
+            try {
+                log(`Reading ${file.name}...`);
+                const zip = await JSZip.loadAsync(file);
+                const indexData = await zip.file("modrinth.index.json").async("string");
+                const index = JSON.parse(indexData);
+                
+                const deps = index.dependencies || {};
+                const mc = deps.minecraft || "Unknown";
+                const loader = Object.keys(deps).find(k => k !== "minecraft") || "None";
+
+                loadedPacks.push({
+                    id: Math.random(),
+                    filename: file.name,
+                    displayName: index.name || file.name,
+                    zip,
+                    metadata: index,
+                    mcVersion: mc,
+                    loaderType: loader,
+                    error: null
+                });
+                log(`Successfully loaded ${index.name}`, 'success');
+            } catch (err) {
+                log(`Failed to parse ${file.name}: ${err.message}`, 'error');
+            }
+        }
+        validateAndRender();
+    });
+
+    function validateAndRender() {
+        currentGlobalError = null;
+        if (loadedPacks.length > 0) {
+            const master = loadedPacks[0];
+            log(`Validating against Primary Pack: ${master.displayName} (${master.mcVersion}/${master.loaderType})`, 'system');
+
+            loadedPacks.forEach((pack, i) => {
+                pack.error = null;
+                if (i === 0) return;
+
+                if (pack.mcVersion !== master.mcVersion) {
+                    pack.error = `Version Mismatch (${pack.mcVersion} vs ${master.mcVersion})`;
+                    currentGlobalError = "Minecraft version mismatch detected.";
+                } else if (pack.loaderType !== master.loaderType) {
+                    pack.error = `Loader Mismatch (${pack.loaderType} vs ${master.loaderType})`;
+                    currentGlobalError = "Mod loader (Forge/Fabric) mismatch detected.";
+                }
+            });
+        }
+        renderUI();
+    }
+
+    function renderUI() {
+        packList.innerHTML = '';
+        if (loadedPacks.length === 0) {
+            packList.innerHTML = '<li style="text-align:center; padding: 20px; color: #585b70;">Queue is empty.</li>';
+            mergeBtn.disabled = true;
+            statusText.textContent = "Waiting for input...";
+            errorBanner.style.display = 'none';
+            return;
+        }
+
+        loadedPacks.forEach((pack, idx) => {
+            const li = document.createElement('li');
+            li.className = `pack-item ${pack.error ? 'invalid' : 'valid'}`;
+            li.innerHTML = `
+                <div class="pack-info">
+                    <div class="pack-header">
+                        <span style="color:${idx===0?'var(--accent)':'#fff'}">${idx===0?'★ MASTER':`#${idx+1}`}</span>
+                        <span>${pack.displayName}</span>
+                    </div>
+                    <div class="pack-meta">
+                        <span class="meta-tag">${pack.mcVersion}</span>
+                        <span class="meta-tag">${pack.loaderType}</span>
+                        ${pack.error ? `<span class="meta-error">⚠️ ${pack.error}</span>` : ''}
+                    </div>
+                </div>
+                <div class="controls">
+                    <button onclick="move(${idx}, -1)" ${idx===0?'disabled':''}>▲</button>
+                    <button onclick="move(${idx}, 1)" ${idx===loadedPacks.length-1?'disabled':''}>▼</button>
+                    <button class="remove" onclick="removePack(${idx})">✕</button>
+                </div>
+            `;
+            packList.appendChild(li);
+        });
+
+        if (currentGlobalError) {
+            errorBanner.textContent = `⛔ Merge Denied: ${currentGlobalError}`;
+            errorBanner.style.display = 'block';
+            mergeBtn.disabled = true;
+            statusText.textContent = "Fix logic conflicts to enable merge.";
+        } else {
+            errorBanner.style.display = 'none';
+            mergeBtn.disabled = false;
+            statusText.textContent = `${loadedPacks.length} packs ready.`;
+        }
+    }
+
+    function move(idx, dir) {
+        const target = idx + dir;
+        [loadedPacks[idx], loadedPacks[target]] = [loadedPacks[target], loadedPacks[idx]];
+        log(`Moved ${loadedPacks[target].displayName} to position ${target + 1}`);
+        validateAndRender();
+    }
+
+    function removePack(idx) {
+        log(`Removed ${loadedPacks[idx].displayName} from list`);
+        loadedPacks.splice(idx, 1);
+        validateAndRender();
+    }
+
+    async function mergePacks() {
+        if (currentGlobalError) {
+            log("ABORTED: Cannot merge packs with conflicting logic versions.", "error");
+            return;
+        }
+
+        mergeBtn.disabled = true;
+        mergeBtn.textContent = "Merging...";
+        log("--- STARTING MERGE PROCESS ---", "system");
+
+        try {
+            const outZip = new JSZip();
+            const master = loadedPacks[0];
+            let finalIndex = JSON.parse(JSON.stringify(master.metadata));
+            finalIndex.name = "Merged Modpack";
+            finalIndex.files = [];
+
+            const pathRegistry = new Set();
+
+            for (const pack of loadedPacks) {
+                log(`Processing files for: ${pack.displayName}...`);
+                
+               
+                pack.metadata.files.forEach(f => {
+                    if (!pathRegistry.has(f.path)) {
+                        finalIndex.files.push(f);
+                        pathRegistry.add(f.path);
+                    } else {
+                        log(`Conflict: Skipping ${f.path} (lower priority)`, 'warn');
+                    }
+                });
+
+                
+                const files = Object.keys(pack.zip.files);
+                for (let path of files) {
+                    if (path.startsWith("overrides/") && !pack.zip.files[path].dir) {
+                        const internalPath = path.replace("overrides/", "");
+                        if (!pathRegistry.has("override:" + internalPath)) {
+                            const content = await pack.zip.file(path).async("uint8array");
+                            outZip.file(path, content);
+                            pathRegistry.add("override:" + internalPath);
+                        } else {
+                             // Log only if it's not a generic folder or hidden file
+                             if(!internalPath.includes(".DS_Store")) {
+                                log(`Conflict: Overriding config ${internalPath}`, 'warn');
+                             }
+                        }
+                    }
+                }
+            }
+
+            log("Building final index.json...", "system");
+            outZip.file("modrinth.index.json", JSON.stringify(finalIndex, null, 2));
+            
+            log("Generating .mrpack file (this may take a moment)...");
+            const blob = await outZip.generateAsync({type:"blob"});
+            saveAs(blob, "merged-pack.mrpack");
+            
+            log("SUCCESS: Pack exported successfully!", "success");
+        } catch (err) {
+            log(`CRITICAL ERROR: ${err.message}`, "error");
+        } finally {
+            mergeBtn.disabled = false;
+            mergeBtn.textContent = "Merge & Export";
+        }
+    }
+</script>
+</body>
+</html>
