@@ -519,6 +519,12 @@
             <div id="compatibility-details"></div>
         </div>
 
+        <div id="dependency-warning"
+            style="display:none; background:var(--accent); color:white; padding:1rem; margin-bottom:1rem; border-radius:8px;">
+            <div style="font-weight:bold; margin-bottom:0.5rem;">[Warning] Dependency Issues Detected</div>
+            <div id="dependency-details"></div>
+        </div>
+
         <ul class="pack-list" id="packList"></ul>
 
         <div class="mod-manager">
@@ -527,7 +533,6 @@
                 <div class="tab" data-cat="resourcepacks" onclick="switchTab('resourcepacks')">Resource Packs</div>
                 <div class="tab" data-cat="shaderpacks" onclick="switchTab('shaderpacks')">Shader Packs</div>
                 <div class="tab" data-cat="configs" onclick="switchTab('configs')">Configs</div>
-                <div class="tab" data-cat="scripts" onclick="switchTab('scripts')">Scripts</div>
                 <div class="tab" data-cat="others" onclick="switchTab('others')">Others</div>
             </div>
             <div class="mod-toolbar">
@@ -550,10 +555,15 @@
 
         <div class="action-area"
             style="margin-top:20px; display:flex; justify-content:space-between; align-items:center;">
-            <div id="status-text" style="font-size: 0.85rem; color: #a6adc8;">0 packs loaded.</div>
+            <div id="status-text" style="font-size: 0.85rem; color: #a6adc8;">
+                0 packs loaded | <span id="mod-counter" style="color:var(--accent); font-weight:bold;">0 mods</span>
+            </div>
             <div style="display: flex; gap: 8px;">
                 <button class="btn btn-outline" onclick="location.reload()">Reset All</button>
-                <button class="btn btn-primary" id="mergeBtn" onclick="mergePacks()" disabled>Merge & Export</button>
+                <button class="btn btn-primary" id="exportZipBtn" onclick="mergePacks('zip')" disabled>Export
+                    ZIP</button>
+                <button class="btn btn-primary" id="exportMrpackBtn" onclick="mergePacks('mrpack')" disabled>Export
+                    MRPACK</button>
             </div>
         </div>
     </div>

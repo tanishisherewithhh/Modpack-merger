@@ -1,6 +1,5 @@
 let deepAnalysisPerformed = false;
 
-// Global error redirection to UI log
 window.addEventListener('error', (e) => {
     log(`Script Error: ${e.message}`, 'var(--danger)');
 });
@@ -27,7 +26,7 @@ function initCounter() {
 
 class VersionComparator {
     static parse(versionString) {
-        const cleaned = versionString.replace(/[^0-9.]/g, '');
+        const cleaned = versionString.split('+')[0].replace(/[^0-9.]/g, '');
         const parts = cleaned.split('.').map(p => parseInt(p) || 0);
         return { major: parts[0] || 0, minor: parts[1] || 0, patch: parts[2] || 0, raw: versionString };
     }
@@ -42,6 +41,66 @@ class VersionComparator {
 
     static isNewer(v1, v2) {
         return this.compare(v1, v2) > 0;
+    }
+
+    static satisfies(version, range) {
+        if (!range || range === '*' || range === 'any') return true;
+        if (typeof range !== 'string') range = String(range);
+
+        if (range.includes(' ') && !range.startsWith('[') && !range.startsWith('(')) {
+            return range.split(/\s+/).every(part => this.satisfies(version, part.trim()));
+        }
+
+        if (range.includes('x') || (range.includes('*') && range !== '*')) {
+            if (!range.match(/^[>=<]/)) {
+                const pattern = range.replace(/\./g, '\\.').replace(/[x\*]/g, '.*');
+                const regex = new RegExp('^' + pattern + '(|\\+.*)$');
+                return regex.test(version);
+            }
+            range = range.replace(/[x\*]/g, '0');
+        }
+
+        if (range.startsWith('~')) {
+            const target = range.slice(1);
+            const p = this.parse(target);
+            const min = target;
+            const max = `${p.major}.${p.minor + 1}.0`;
+            const cmpMin = this.compare(version, min);
+            const cmpMax = this.compare(version, max);
+            return cmpMin >= 0 && cmpMax < 0;
+        }
+
+        if (range.startsWith('>=') || range.startsWith('>') || range.startsWith('<=') || range.startsWith('<')) {
+            const op = range.match(/(>=|>|<=|<)/)[0];
+            const target = range.slice(op.length);
+            const cmp = this.compare(version, target);
+            if (op === '>=') return cmp >= 0;
+            if (op === '>') return cmp > 0;
+            if (op === '<=') return cmp <= 0;
+            if (op === '<') return cmp < 0;
+        }
+
+        if (range.startsWith('[') || range.startsWith('(')) {
+            const parts = range.slice(1, -1).split(',');
+            const min = parts[0].trim();
+            const max = parts[1] ? parts[1].trim() : null;
+
+            let minOk = true;
+            if (min) {
+                const cmp = this.compare(version, min);
+                minOk = range.startsWith('[') ? cmp >= 0 : cmp > 0;
+            }
+
+            let maxOk = true;
+            if (max) {
+                const cmp = this.compare(version, max);
+                maxOk = range.endsWith(']') ? cmp <= 0 : cmp < 0;
+            }
+
+            return minOk && maxOk;
+        }
+
+        return this.compare(version, range) === 0;
     }
 }
 
@@ -93,7 +152,16 @@ class JarMetadataExtractor {
             const content = await file.async('string');
             const data = JSON.parse(content);
 
-            const mods = [{ id: data.id || 'unknown', version: data.version || 'unknown', name: data.name }];
+            const mods = [{
+                id: data.id || 'unknown',
+                version: data.version || 'unknown',
+                name: data.name,
+                depends: data.depends || {},
+                provides: data.provides || []
+            }];
+            if (data.provides && !Array.isArray(data.provides)) {
+                mods[0].provides = Object.keys(data.provides);
+            }
             const bundled = [];
 
             if (data.jars && Array.isArray(data.jars)) {
@@ -114,7 +182,7 @@ class JarMetadataExtractor {
             return { mods, bundled };
         } catch (err) {
             log(`Fabric metadata error: ${err.message}`, 'var(--danger)');
-            return { mods: [{ id: 'parse_error', version: 'unknown' }], bundled: [] };
+            return { mods: [{ id: 'parse_error', version: 'unknown', depends: {} }], bundled: [] };
         }
     }
 
@@ -126,12 +194,82 @@ class JarMetadataExtractor {
 
             const id = modIdMatch ? modIdMatch[1] : 'unknown';
             const version = versionMatch ? versionMatch[1] : 'unknown';
+            const depends = {};
 
-            return { mods: [{ id, version }], bundled: [] };
+            const depBlocks = content.split('[[dependencies.');
+            for (let i = 1; i < depBlocks.length; i++) {
+                const block = depBlocks[i];
+                const depId = block.split(']]')[0].trim();
+                const versionRangeMatch = block.match(/versionRange\s*=\s*"([^"]+)"/);
+                const mandatoryMatch = block.match(/mandatory\s*=\s*(true|false)/);
+
+                if (mandatoryMatch && mandatoryMatch[1] === 'true') {
+                    depends[depId] = versionRangeMatch ? versionRangeMatch[1] : '*';
+                }
+            }
+
+            return { mods: [{ id, version, depends }], bundled: [] };
         } catch (err) {
             log(`Forge metadata error: ${err.message}`, 'var(--danger)');
-            return { mods: [{ id: 'parse_error', version: 'unknown' }], bundled: [] };
+            return { mods: [{ id: 'parse_error', version: 'unknown', depends: {} }], bundled: [] };
         }
+    }
+}
+
+
+class DependencyValidator {
+    static validate(modRegistry) {
+        const issues = [];
+
+        const presentMods = new Map();
+        modRegistry.forEach((data, url) => {
+            const fileName = data.fileName;
+            const packName = data.packName;
+            data.metadata.mods.forEach(m => {
+                presentMods.set(m.id, { version: m.version, fileName, packName });
+                if (m.provides && Array.isArray(m.provides)) {
+                    m.provides.forEach(pId => {
+                        if (!presentMods.has(pId)) presentMods.set(pId, { version: m.version, fileName, packName, isProvided: true });
+                    });
+                }
+            });
+            data.metadata.bundled.forEach(m => presentMods.set(m.id, { version: m.version, fileName, packName }));
+        });
+
+        modRegistry.forEach((data, url) => {
+            const metadata = data.metadata;
+            if (!metadata.mods) return;
+
+            const primaryMod = metadata.mods[0];
+            if (!primaryMod || !primaryMod.depends) return;
+
+            for (const [depId, range] of Object.entries(primaryMod.depends)) {
+                if (['minecraft', 'java', 'fabricloader', 'fabric', 'quiltloader', 'forge', 'neoforge', 'liteloader', 'mixinextras', 'mixinextra', 'mixins', 'cloth-config', 'cloth-config2'].includes(depId.toLowerCase())) continue;
+
+                if (!presentMods.has(depId)) {
+                    issues.push({
+                        type: 'missing',
+                        modId: depId,
+                        requiredBy: primaryMod.id,
+                        requiredVersion: range,
+                        message: `Mod '${primaryMod.id}' requires '${depId}' (${range}), but it's missing!`
+                    });
+                } else {
+                    const present = presentMods.get(depId);
+                    if (!VersionComparator.satisfies(present.version, range)) {
+                        issues.push({
+                            type: 'outdated',
+                            modId: depId,
+                            requiredBy: primaryMod.id,
+                            requiredVersion: range,
+                            presentVersion: present.version,
+                            message: `Mod '${primaryMod.id}' requires version '${range}' of '${depId}', but version '${present.version}' is installed!`
+                        });
+                    }
+                }
+            }
+        });
+        return issues;
     }
 }
 
@@ -145,8 +283,8 @@ class ConflictResolver {
         this.modRegistry.clear();
         const enriched = [];
 
-        const filesToAnalyze = files.filter(f => f.enabled && f.downloads && f.downloads.length > 0);
-        const skippedFiles = files.filter(f => !f.enabled || !f.downloads || f.downloads.length === 0);
+        const filesToAnalyze = files.filter(f => f.enabled && f.category === 'mods');
+        const skippedFiles = files.filter(f => !f.enabled || f.category !== 'mods');
 
         skippedFiles.forEach(file => {
             enriched.push({ ...file, metadata: null, conflicts: [] });
@@ -164,8 +302,17 @@ class ConflictResolver {
             const batchResults = await Promise.all(
                 batch.map(async (file) => {
                     const pack = packs.find(p => p.id === file.pId);
-                    const url = file.downloads[0];
-                    const metadata = await this.extractor.extract(url, file.fileName);
+                    let metadata;
+                    if (file.isStandard) {
+                        try {
+                            metadata = await this.extractor.parseMetadata(file._entry, file.fileName);
+                        } catch (e) {
+                            metadata = { mods: [{ id: file.fileName, version: 'unknown', depends: {} }], bundled: [] };
+                        }
+                    } else {
+                        const url = file.downloads[0];
+                        metadata = await this.extractor.extract(url, file.fileName);
+                    }
                     const conflicts = this.detectConflicts(file, metadata, pack);
                     return { ...file, metadata, conflicts };
                 })
@@ -173,7 +320,12 @@ class ConflictResolver {
 
             batchResults.forEach(result => {
                 enriched.push(result);
-                this.registerMods(result, result.metadata);
+                const key = result.isStandard ? `local:${result.pId}:${result.path}` : result.downloads[0];
+                this.modRegistry.set(key, {
+                    metadata: result.metadata,
+                    fileName: result.fileName,
+                    packName: result.pName
+                });
             });
         }
 
@@ -358,8 +510,7 @@ class StandardPackResolver {
         if (lowerPath.startsWith('mods/') || lowerPath.includes('/mods/')) return 'mods';
         if (lowerPath.startsWith('resourcepacks/') || lowerPath.includes('resourcepacks/')) return 'resourcepacks';
         if (lowerPath.startsWith('shaderpacks/') || lowerPath.includes('shaderpacks/')) return 'shaderpacks';
-        if (lowerPath.startsWith('config/') || lowerPath.includes('config/')) return 'configs';
-        if (lowerPath.startsWith('scripts/') || lowerPath.includes('scripts/')) return 'scripts';
+        if (lowerPath.startsWith('config/') || lowerPath.includes('config/') || lowerPath.startsWith('scripts/') || lowerPath.includes('scripts/')) return 'configs';
         return 'others';
     }
 
@@ -367,7 +518,6 @@ class StandardPackResolver {
         let version = null;
         let loader = null;
 
-        // 1. Check CurseForge manifest.json
         const manifestEntry = zip.file('manifest.json');
         if (manifestEntry) {
             try {
@@ -375,7 +525,7 @@ class StandardPackResolver {
                 if (data.minecraft) {
                     version = data.minecraft.version;
                     if (data.minecraft.modLoaders && data.minecraft.modLoaders.length > 0) {
-                        loader = data.minecraft.modLoaders[0].id.split('-')[0]; // "fabric-0.14.22" -> "fabric"
+                        loader = data.minecraft.modLoaders[0].id.split('-')[0];
                     }
                 }
             } catch (e) {
@@ -383,7 +533,6 @@ class StandardPackResolver {
             }
         }
 
-        // 2. Check MultiMC / Prism instance.cfg
         const instanceCfg = zip.file('instance.cfg');
         if (instanceCfg && !version) {
             try {
@@ -394,13 +543,12 @@ class StandardPackResolver {
             } catch (e) { }
         }
 
-        // 3. Heuristics on mod filenames
         if (!version || !loader) {
             const modPaths = Object.keys(zip.files).filter(p => (p.startsWith('mods/') || p.includes('/mods/')) && p.endsWith('.jar'));
             for (const path of modPaths) {
                 const name = path.split('/').pop();
                 if (!version) {
-                    const vMatch = name.match(/(1\.\d+(?:\.\d+)?)/); // e.g. 1.20.1
+                    const vMatch = name.match(/(1\.\d+(?:\.\d+)?)/);
                     if (vMatch) version = vMatch[1];
                 }
                 if (!loader) {
@@ -408,8 +556,14 @@ class StandardPackResolver {
                     else if (name.toLowerCase().includes('forge')) loader = 'forge';
                     else if (name.toLowerCase().includes('quilt')) loader = 'quilt';
                     else if (name.toLowerCase().includes('neoforge')) loader = 'neoforge';
+                    else if (name.toLowerCase().includes('liteloader') || name.endsWith('.litemod')) loader = 'liteloader';
                 }
                 if (version && loader) break;
+            }
+
+            if (!loader) {
+                const hasLite = Object.keys(zip.files).some(p => p.endsWith('.litemod'));
+                if (hasLite) loader = 'liteloader';
             }
         }
 
@@ -480,7 +634,7 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
                     fileName: f.path.split('/').pop(),
                     pId, pName: index.name,
                     enabled: true,
-                    category: 'mods', // Remote Modrinth files are always jars
+                    category: 'mods',
                     isStandard: false,
                     downloads: f.downloads,
                     _original: f
@@ -502,11 +656,12 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
                 }
 
                 const depKeys = Object.keys(index.dependencies);
-                let detectedLoader = 'fabric'; // Default to fabric if unknown
+                let detectedLoader = 'fabric';
                 if (depKeys.some(k => k.includes('fabric'))) detectedLoader = 'fabric';
                 else if (depKeys.some(k => k.includes('forge')) && !depKeys.some(k => k.includes('neoforge'))) detectedLoader = 'forge';
                 else if (depKeys.some(k => k.includes('neoforge'))) detectedLoader = 'neoforge';
                 else if (depKeys.some(k => k.includes('quilt'))) detectedLoader = 'quilt';
+                else if (depKeys.some(k => k.includes('liteloader'))) detectedLoader = 'liteloader';
 
                 loadedPacks.push({
                     id: pId, zip,
@@ -580,16 +735,99 @@ async function performAnalysis(deep = false) {
         analyzeBtn.innerText = "Analyzing...";
     }
 
+    clearDependencyIssues();
     try {
         allFiles = await conflictResolver.analyzeFiles(allFiles, loadedPacks);
         conflictResolver.resolveByPriority(allFiles, loadedPacks);
+
+        const depIssues = DependencyValidator.validate(conflictResolver.modRegistry);
         deepAnalysisPerformed = true;
         log('Deep Analysis Complete', 'var(--success)', true);
+
+        if (depIssues.length > 0) {
+            log(`Found ${depIssues.length} dependency issue(s).`, 'var(--warning)');
+            displayDependencyIssues(depIssues);
+        }
     } catch (err) {
         log(`Analysis error: ${err.message}`, 'var(--danger)');
     }
     analysisInProgress = false;
     updateUI();
+}
+
+class ModrinthResolver {
+    static async searchFix(modId, range, mcVersion, loader) {
+        try {
+            const searchUrl = `https://api.modrinth.com/v2/search?query=${modId}&facets=[["categories:${loader}"],["versions:${mcVersion}"]]`;
+            const searchResp = await fetch(searchUrl);
+            const searchData = await searchResp.json();
+
+            if (searchData.hits.length === 0) return null;
+
+            const project = searchData.hits.find(h => h.slug === modId || h.title.toLowerCase().includes(modId));
+            if (!project) return null;
+
+            const versionsUrl = `https://api.modrinth.com/v2/project/${project.project_id}/version?loaders=["${loader}"]&game_versions=["${mcVersion}"]`;
+            const versionsResp = await fetch(versionsUrl);
+            const versions = await versionsResp.json();
+
+            for (const v of versions) {
+                if (VersionComparator.satisfies(v.version_number, range)) {
+                    return {
+                        projectId: project.project_id,
+                        versionId: v.id,
+                        versionNumber: v.version_number,
+                        fileName: v.files[0].filename,
+                        url: v.files[0].url,
+                        size: v.files[0].size,
+                        hashes: v.files[0].hashes,
+                        primary: true
+                    };
+                }
+            }
+        } catch (e) {
+            log(`Modrinth search failed: ${e.message}`, 'var(--danger)');
+        }
+        return null;
+    }
+
+    static async applyFix(issue) {
+        const base = loadedPacks[0];
+        if (!base) return;
+
+        log(`Attempting auto-fix for ${issue.modId}...`, 'var(--accent)');
+        const fix = await this.searchFix(issue.modId, issue.requiredVersion, base.ver, base.loader);
+
+        if (fix) {
+            log(`Found compatible version: ${fix.versionNumber}`, 'var(--success)');
+
+            const newFile = {
+                path: `mods/${fix.fileName}`,
+                fileName: fix.fileName,
+                pId: base.id,
+                pName: base.name,
+                enabled: true,
+                category: 'mods',
+                isStandard: false,
+                downloads: [fix.url],
+                _original: {
+                    path: `mods/${fix.fileName}`,
+                    hashes: fix.hashes,
+                    env: { client: "required", server: "required" },
+                    downloads: [fix.url],
+                    fileSize: fix.size
+                }
+            };
+
+            allFiles.push(newFile);
+            updateUI();
+            log(`Added ${fix.fileName} to modpack registry.`, 'var(--success)');
+            alert(`Success! Added ${fix.fileName} to fix dependency requirement.`);
+        } else {
+            log(`Could not find a compatible version of '${issue.modId}' on Modrinth.`, 'var(--warning)');
+            alert(`Sorry, I couldn't find a compatible version of '${issue.modId}' on Modrinth that matches Minecraft ${base.ver} and ${base.loader}.`);
+        }
+    }
 }
 
 function displayCompatibilityWarnings(issues) {
@@ -605,6 +843,31 @@ function displayCompatibilityWarnings(issues) {
     warningDiv.style.display = 'block';
     detailsDiv.innerHTML = issues.map(issue => `<div>• ${issue.message}</div>`).join('');
     mergeBtn.disabled = true;
+}
+
+let currentDependencyIssues = [];
+function displayDependencyIssues(issues) {
+    const warningDiv = document.getElementById('dependency-warning');
+    const detailsDiv = document.getElementById('dependency-details');
+    if (!warningDiv || !detailsDiv) return;
+
+    currentDependencyIssues = issues;
+    warningDiv.style.display = 'block';
+
+    detailsDiv.innerHTML = issues.map((issue, idx) => `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; padding:5px; background:rgba(255,255,255,0.1); border-radius:4px;">
+            <span>• ${issue.message}</span>
+            <button class="btn btn-sm" style="background:var(--success); color:white; border:none; padding:4px 8px; cursor:pointer;" onclick="ModrinthResolver.applyFix(currentDependencyIssues[${idx}])">
+                Auto-Fix
+            </button>
+        </div>
+    `).join('');
+}
+
+function clearDependencyIssues() {
+    const warningDiv = document.getElementById('dependency-warning');
+    if (warningDiv) warningDiv.style.display = 'none';
+    currentDependencyIssues = [];
 }
 
 function updateUI() {
@@ -641,8 +904,11 @@ function updateUI() {
         list.appendChild(li);
     });
 
-    const mergeBtn = document.getElementById('mergeBtn');
-    mergeBtn.disabled = (loadedPacks.length === 0 || hasIssues);
+    const zipBtn = document.getElementById('exportZipBtn');
+    const mrpackBtn = document.getElementById('exportMrpackBtn');
+    const disabled = (loadedPacks.length === 0 || hasIssues);
+    if (zipBtn) zipBtn.disabled = disabled;
+    if (mrpackBtn) mrpackBtn.disabled = disabled;
 
     const analyzeBtn = document.getElementById('deepAnalyzeBtn');
     if (analyzeBtn) {
@@ -662,7 +928,24 @@ function updateUI() {
         }
     }
 
-    document.getElementById('status-text').textContent = `${loadedPacks.length} packs loaded.`;
+    const uniqueMods = new Set();
+    allFiles.forEach(f => {
+        if (f.category === 'mods' && f.enabled) {
+            if (f.metadata && f.metadata.mods) {
+                f.metadata.mods.forEach(m => uniqueMods.add(m.id));
+                if (f.metadata.bundled) {
+                    f.metadata.bundled.forEach(m => uniqueMods.add(m.id));
+                }
+            } else {
+                uniqueMods.add(f.fileName);
+            }
+        }
+    });
+
+    const statusText = document.getElementById('status-text');
+    if (statusText) {
+        statusText.innerHTML = `${loadedPacks.length} packs loaded | <span style="color:var(--accent); font-weight:bold;">${uniqueMods.size} mods</span>`;
+    }
     filterFiles();
 }
 
@@ -732,9 +1015,9 @@ async function movePriority(idx, direction) {
     }
 }
 
-async function mergePacks() {
+async function mergePacks(format) {
     try {
-        const isZipMode = deepAnalysisPerformed;
+        const isZipMode = (format === 'zip');
         log(`Starting export as ${isZipMode ? 'Standard ZIP' : 'MRPACK'}...`, 'var(--accent)', true);
 
         const outZip = new JSZip();
