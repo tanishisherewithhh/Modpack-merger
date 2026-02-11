@@ -63,7 +63,7 @@
         .mod-card.disabled { opacity: 0.4; filter: grayscale(1); border-style: dashed; }
         .card-content { flex: 1; min-width: 0; }
         .file-title { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; margin-bottom: 2px; }
-        .conflict-badge { position: absolute; top: 5px; right: 5px; font-size: 0.6rem; background: var(--warning); color: #111; padding: 1px 4px; border-radius: 3px; font-weight: bold; }
+        .duplicate-badge { position: absolute; top: 5px; right: 5px; font-size: 0.6rem; background: var(--warning); color: #111; padding: 1px 4px; border-radius: 3px; font-weight: bold; }
         .auto-resolved { font-size: 0.7rem; color: var(--success); display: block; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         
         #log-area { background: var(--terminal-bg); color: var(--success); font-family: 'Consolas', monospace; padding: 15px; height: 220px; overflow-y: scroll; font-size: 0.8rem; margin-top: 20px; border-radius: 8px; border: 1px solid var(--border); white-space: pre-wrap; }
@@ -112,7 +112,7 @@
             </div>
             <div class="bulk-actions">
                 <label class="filter-toggle">
-                    <input type="checkbox" id="showConflictsOnly" onchange="filterFiles()"> Show Duplicates Only
+                    <input type="checkbox" id="showDuplicatesOnly" onchange="filterFiles()"> Show Duplicates Only
                 </label>
                 <div style="flex-grow: 1;"></div>
                 <span id="visibleCount" style="color: #888;">0 items shown</span>
@@ -198,13 +198,13 @@
                 });
                 
                 log(`Successfully parsed: ${index.name}`);
-                autoResolveConflicts();
+                autoResolveDuplicates();
             } catch (err) { log(`Error parsing pack: ${err.message}`, 'var(--danger)'); }
         }
         updateUI();
     });
 
-    function autoResolveConflicts() {
+    function autoResolveDuplicates() {
         const seenPaths = new Map();
         allFiles.forEach(f => { f.enabled = true; f.isDuplicate = false; delete f.keptSource; });
 
@@ -248,13 +248,13 @@
 
     function filterFiles() {
         const query = document.getElementById('modSearch').value.toLowerCase();
-        const conflictsOnly = document.getElementById('showConflictsOnly').checked;
+        const duplicatesOnly = document.getElementById('showDuplicatesOnly').checked;
         const grid = document.getElementById('modGrid');
         grid.innerHTML = '';
         
         const filtered = allFiles.filter(m => {
             if (m.category !== currentTab) return false;
-            if (conflictsOnly && !m.isDuplicate) return false;
+            if (duplicatesOnly && !m.isDuplicate) return false;
             return m.fileName.toLowerCase().includes(query) || m.pName.toLowerCase().includes(query);
         });
 
@@ -264,7 +264,7 @@
             const card = document.createElement('div');
             card.className = `mod-card ${m.enabled ? '' : 'disabled'}`;
             card.innerHTML = `
-                ${m.isDuplicate ? '<span class="conflict-badge">LOWER PRIO</span>' : ''}
+                ${m.isDuplicate ? '<span class="duplicate-badge">LOWER PRIO</span>' : ''}
                 <input type="checkbox" ${m.enabled?'checked':''} onchange="toggleFile('${m.path}','${m.pId}')">
                 <div class="card-content">
                     <div class="file-title">${m.fileName}</div>
@@ -286,7 +286,7 @@
         if (newIdx >= 0 && newIdx < loadedPacks.length) {
             const pack = loadedPacks.splice(idx, 1)[0];
             loadedPacks.splice(newIdx, 0, pack);
-            autoResolveConflicts();
+            autoResolveDuplicates();
             updateUI();
         }
     }
@@ -339,11 +339,12 @@
     }
 
     function switchTab(tab) { currentTab = tab; document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.cat === tab)); filterFiles(); }
-    function removePack(idx) { const id = loadedPacks[idx].id; allFiles = allFiles.filter(m => m.pId !== id); loadedPacks.splice(idx, 1); autoResolveConflicts(); updateUI(); }
+    function removePack(idx) { const id = loadedPacks[idx].id; allFiles = allFiles.filter(m => m.pId !== id); loadedPacks.splice(idx, 1); autoResolveDuplicates(); updateUI(); }
     function filterByPack(id) { document.getElementById('modSearch').value = `pack:${id}`; filterFiles(); }
     function bulkSet(val) { allFiles.filter(m => m.category === currentTab).forEach(f => f.enabled = val); filterFiles(); }
 </script>
 </body>
 </html>
+
 
 
