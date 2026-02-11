@@ -7,22 +7,39 @@ window.addEventListener('unhandledrejection', (e) => {
     log(`Promise Error: ${e.reason?.message || e.reason}`, 'var(--danger)');
 });
 
-function initCounter() {
-    const counterElement = document.getElementById('viewCount');
-    const storageKey = 'modpack_merger_views';
-    const sessionKey = 'modpack_merger_session';
+const VISITOR_COUNTER_KEY = 'a8132defc253b7721f8ff11cff8e6c906ce4032b048a5398abf604e054de3f23';
 
-    if (!sessionStorage.getItem(sessionKey)) {
-        let currentCount = parseInt(localStorage.getItem(storageKey) || '0', 10);
-        currentCount++;
-        localStorage.setItem(storageKey, currentCount.toString());
-        sessionStorage.setItem(sessionKey, '1');
+async function initCounter() {
+    const el = document.getElementById('viewCount');
+    const id = 'd96cac2f-e76b-457e-b992-38d2864a4f27';
+    const offset = 156;
+    const sessionKey = 'modpack_merger_hit';
+    const headers = { 'X-API-Key': VISITOR_COUNTER_KEY };
+    try {
+        let count = 0;
+        if (!sessionStorage.getItem(sessionKey)) {
+            const res = await fetch(`https://letscountapi.com/api/public/counters/${id}/increment`, {
+                method: 'POST',
+                headers: headers
+            });
+            const data = await res.json();
+            count = data.value || 0;
+            sessionStorage.setItem(sessionKey, 'true');
+        } else {
+            const res = await fetch(`https://letscountapi.com/api/public/counters/${id}`, {
+                headers: headers
+            });
+            const data = await res.json();
+            count = data.value || 0;
+        }
+        el.innerText = (count + offset).toLocaleString();
+    } catch (e) {
+        el.innerText = offset.toLocaleString();
     }
-
-    const viewCount = parseInt(localStorage.getItem(storageKey) || '0', 10);
-    counterElement.innerText = viewCount.toLocaleString();
-    counterElement.style.color = "var(--accent)";
+    el.style.color = "var(--accent)";
 }
+
+initCounter();
 
 class VersionComparator {
     static parse(versionString) {
