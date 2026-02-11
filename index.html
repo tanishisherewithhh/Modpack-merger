@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart ModPack Merger/Combiner | Combine Minecraft .mrpack Files</title>
+    <title>Modrinth ModPack Merger/Combiner | Combine Minecraft .mrpack Files</title>
     <link rel="icon" href="https://github.com/tanishisherewithhh.png">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
@@ -81,7 +81,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
         <span id="viewCount">Loading...</span> views
     </div>
-    <h1>Smart ModPack Merger</h1>
+    <h1>Modrinth ModPack Merger</h1>
     <div class="subtitle">Combine multiple .mrpack files. Arrange packs to set priority, top packs overwrite lower ones automatically.</div>
 
     <div class="container">
@@ -112,7 +112,7 @@
             </div>
             <div class="bulk-actions">
                 <label class="filter-toggle">
-                    <input type="checkbox" id="showConflictsOnly" onchange="filterFiles()"> Show Conflicts Only
+                    <input type="checkbox" id="showConflictsOnly" onchange="filterFiles()"> Show Duplicates Only
                 </label>
                 <div style="flex-grow: 1;"></div>
                 <span id="visibleCount" style="color: #888;">0 items shown</span>
@@ -150,10 +150,10 @@
 <script>
     async function initCounter() {
         const counterElement = document.getElementById('viewCount');
-        // Base64 encoding the URL to bypass simple text-scanners in some extensions
+        // Base64 encoding because why not
         // This decodes to: https://api.counterapi.dev/v1/modpack-merger_AA_/page-views/up
-        const encodedUrl = "aHR0cHM6Ly9hcGkuY291bnRlcmFwaS5kZXYvdjEvbW9kcGFjay1tZXJnZXJfQUFfL3BhZ2Utdmlld3MvdXA=";
-        const url = atob(encodedUrl);
+        // const encodedUrl = "aHR0cHM6Ly9hcGkuY291bnRlcmFwaS5kZXYvdjEvbW9kcGFjay1tZXJnZXJfQUFfL3BhZ2Utdmlld3MvdXA=";
+        const url = "https://api.counterapi.dev/v1/modpack-merger_AA_/page-views/up";
         try {
             const response = await fetch(url);
             if (!response.ok) throw new Error('API_DOWN');
@@ -345,3 +345,4 @@
 </script>
 </body>
 </html>
+
