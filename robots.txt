@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://tanishisherewithhh.github.io/Modpack-merger/sitemap.xml

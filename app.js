@@ -1157,4 +1157,3 @@ function editMetadata(pId, field) {
     const newVal = prompt(`Edit ${field}:`, pack[field]);
     if (newVal) { pack[field] = newVal; performAnalysis(); }
 }
-
